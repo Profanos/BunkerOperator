@@ -10,7 +10,8 @@ export class CoverageSystem {
   /** Call every game tick — checks coverage and updates signal state */
   update(): void {
     const state = StateManager.getState();
-    const entities = state.entities.filter((e) => e.alive);
+    // Only survivors broadcast on radio — zombies don't use radios
+    const entities = state.entities.filter((e) => e.alive && e.type === 'survivor');
     const playerFreq = state.radioFrequency;
 
     // Find the first station whose frequency matches AND has an entity in coverage

@@ -113,6 +113,11 @@ const SESSION_1: DialogueSession = {
           id: 'opt_route',
           text: 'Northeast of your position, moving south. Head east now.',
           nextNodeId: 'route_given',
+          // This key is checked by SituationManager to switch Mara to the safe path
+          journalEffect: {
+            key: 'radio:survivor_warned',
+            text: 'You warned Mara about the approaching threat and directed her north.',
+          },
         },
       ],
     },

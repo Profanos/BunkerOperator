@@ -111,6 +111,17 @@ export function RadioPanel() {
       text: `You: "${option.text}"`,
     });
 
+    // Apply journal effect if defined — used by game systems (e.g. path switching)
+    if (option.journalEffect) {
+      StateManager.addJournalEntry({
+        key: option.journalEffect.key,
+        timestamp: Date.now(),
+        day: state.currentDay,
+        timeStr,
+        text: option.journalEffect.text,
+      });
+    }
+
     if (option.nextNodeId === null) {
       // Conversation ends
       setMessages(newMessages);

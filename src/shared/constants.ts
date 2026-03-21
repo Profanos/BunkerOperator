@@ -33,10 +33,10 @@ export const GRID_ROWS = 10;
 export const SENSOR_RANGE = 1;
 
 /** How long radar echoes remain visible in milliseconds */
-export const ECHO_FADE_MS = 4000;
+export const ECHO_FADE_MS = 8000;
 
-/** Seconds between entity path advances — keep low during testing, raise for production */
-export const ENTITY_MOVE_INTERVAL = 4;
+/** Seconds between entity path advances */
+export const ENTITY_MOVE_INTERVAL = 20;
 
 /** Radio frequency bounds */
 export const RADIO_FREQ_MIN = 88.0;
