@@ -25,9 +25,8 @@ const SCANNER_CONFIG = {
    *  grid top-left = center - (cellSize*5/2) = (289-135, 267-135) */
   grid: { x: 154, y: 132 },
 
-  /** Invisible hit zone over the art SCAN button.
-   *  Window x range 647–941 → center x=794. Button sits at bottom of right panel. */
-  scanButton: { x: 794, y: 510, w: 294, h: 45 },
+  /** Invisible hit zone over the art SCAN button. P3(699,480)→P2(932,524) */
+  scanButton: { x: 816, y: 502, w: 233, h: 44 },
 
   /** Center of each dark readout window — all share center x=794.
    *  Y values evenly spaced from SENSOR top (y≈79) with ~68px per section. */
@@ -40,8 +39,6 @@ const SCANNER_CONFIG = {
     relay:    { x: 795, y: 409 },
   },
 } as const;
-
-const DIAMETER = SENSOR_RANGE * 2 + 1; // 5
 
 // Cell color palette — tuned to sit on the dark green scope glass
 const C_CELL_OOB       = 0x000000; // outside grid — fully black

@@ -25,10 +25,6 @@ export function formatGameTime(timeRemaining: number): string {
   return `${gameHour.toString().padStart(2, '0')}:${gameMinute.toString().padStart(2, '0')}`;
 }
 
-/** Grid dimensions */
-export const GRID_COLS = 10;
-export const GRID_ROWS = 10;
-
 /** Radar sensor range in grid cells */
 export const SENSOR_RANGE = 2;
 

@@ -75,15 +75,16 @@ bunker-operator/
 │   ├── App.tsx              ← Root component: manages game screens
 │   │
 │   ├── ui/                  ← React components (text, interaction)
-│   │   ├── DialoguePanel.tsx
-│   │   ├── JournalPanel.tsx
-│   │   ├── TimerDisplay.tsx
-│   │   ├── MorningMessages.tsx
-│   │   ├── RadioPanel.tsx
-│   │   ├── MapOverlay.tsx
-│   │   ├── ManualPanel.tsx
-│   │   ├── GameOverScreen.tsx
-│   │   └── MainMenu.tsx
+│   │   ├── RadioPanel.tsx       ← Frequency tuning + dialogue exchange
+│   │   ├── JournalPanel.tsx     ← Scrollable log with category tabs
+│   │   ├── ManualPanel.tsx      ← Static reference panel (territory data)
+│   │   ├── MapOverlay.tsx       ← Grid map + sensor placement + entity markers
+│   │   ├── MorningMessages.tsx  ← Day-start survivor messages
+│   │   ├── EndScreen.tsx        ← End-of-game results screen
+│   │   ├── MainMenu.tsx         ← Start screen (New Game / Continue)
+│   │   ├── SplashScreen.tsx     ← HookDev Games splash on launch
+│   │   ├── SettingsPanel.tsx    ← Volume control
+│   │   └── DebugPanel.tsx       ← Debug controls (React side)
 │   │
 │   ├── game/                ← Phaser code (visuals, game world)
 │   │   ├── PhaserGame.tsx   ← React component that mounts Phaser
@@ -94,7 +95,7 @@ bunker-operator/
 │   │   │
 │   │   ├── systems/
 │   │   │   ├── SituationManager.ts  ← Manages entities, paths, positions, day/night progression
-│   │   │   ├── RadarSystem.ts       ← Pulse logic, echo detection, range checking
+│   │   │   ├── RadarSystem.ts       ← Scanner panel: pulse logic, grid, readouts
 │   │   │   ├── CoverageSystem.ts    ← Radio station coverage calculations
 │   │   │   ├── AudioManager.ts      ← Sound effects and music
 │   │   │   └── DebugManager.ts      ← FPS, event log, toggle with backtick
@@ -105,24 +106,24 @@ bunker-operator/
 │   ├── shared/              ← Used by BOTH React and Phaser
 │   │   ├── EventBridge.ts   ← emit, on, off
 │   │   ├── StateManager.ts  ← All game state
+│   │   ├── SaveSystem.ts    ← Auto-save/load to localStorage
 │   │   ├── constants.ts     ← Game config values (canvas size, timer duration, sensor range)
 │   │   ├── types.ts         ← Shared TypeScript types
 │   │   └── territory.ts     ← Territory data: grid, zones, stations, landmarks
 │   │
 │   ├── data/                ← Game content (dialogue, paths, messages)
 │   │   ├── situations/
-│   │   │   ├── situation1.ts    ← Lone Good Survivor: paths, dialogue, messages
-│   │   │   └── situation2.ts    ← Lone Hostile Survivor: paths, dialogue, messages
+│   │   │   ├── types.ts         ← Situation data structure
+│   │   │   ├── situation1.ts    ← Lone Good Survivor (Mara): paths, dialogue, messages
+│   │   │   └── situation2.ts    ← Lone Hostile Survivor (Kael): paths, dialogue, messages
 │   │   └── dialogue/
 │   │       └── types.ts         ← Dialogue tree type definitions
 │   │
-│   └── server/              ← Multiplayer (optional, ignore for V1)
-│       ├── server.ts
-│       └── README.md
+│   └── server/              ← Multiplayer (future, currently empty)
 │
 └── public/
     └── assets/
-        ├── sprites/
+        ├── sprites/         ← Panel art, desk surface, menu assets
         ├── audio/
         │   ├── sfx/
         │   └── music/
@@ -251,17 +252,27 @@ Quality over speed. One thing at a time.
 
 ---
 
-## What NOT to Build in V1
+## V1 Alpha — Complete
 
-These are in GDD.md but explicitly cut from V1. Do NOT build them.
-However, do NOT make architectural decisions that would block adding
-them later.
+V1 Alpha shipped 2026-03-23. Two situations (Mara + Kael), 3 days,
+all endings, save/load, art-integrated panels. See git tag/commit.
 
-- Full Technical Manual (browsable, partially damaged, multiple pages — V1 has a simplified static version)
+## Current Phase: Beta
+
+See PLAN.md for the full beta task list. Key additions over V1:
+- Energy management system (tools cost power)
+- Map rework: React overlay → Phaser layer with drag-and-drop
+- Narrative onboarding (incipit, intro screens)
+- Radio contact identity (question mark → face reveal)
+- Audio implementation
+- Art polish pass
+
+## What NOT to Build (deferred past beta)
+
+- Full Technical Manual (browsable, partially damaged, multiple pages)
 - Distance Zones (Far/Mid/Near echo detail)
 - Ambient Intercept (audio + text fragments in Near zone)
-- Situations 3 and 4 (groups)
+- Situations 3 and 4 (groups) — under discussion for beta
 - Cross-Situation Dynamics
 - First-Person Bunker View (separate close-up views with transitions)
-- Hand-Drawn Map Art
 - Progressive Game Over (3 hostiles knowing location)

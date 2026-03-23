@@ -495,6 +495,28 @@ Details to be determined during production.
 
 ---
 
+## Energy Management (Beta)
+
+The bunker runs on limited power. The player has a finite energy budget
+each day. Every tool — map, scanner, radio — costs energy to keep
+powered on. Turning a tool on lights up its panel; turning it off dims
+it to a dark/inactive state.
+
+This replaces the implicit time pressure of V1 (where every tool was
+always available) with an explicit resource constraint. The player must
+choose: do I keep the scanner running to watch for movement, or do I
+shut it down to save power for a radio session later?
+
+Energy does not regenerate during the day. The budget resets at dawn.
+The amount available may vary by day or situation.
+
+Design consequence: every panel needs an "off" visual state. The map
+goes dark when unpowered. The radio shows no frequency. The scanner
+screen is blank. This reinforces the physical bunker aesthetic — these
+are real machines that need electricity, not UI windows.
+
+---
+
 ## What This Game Is NOT
 
 - No direct combat
