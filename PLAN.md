@@ -27,168 +27,214 @@ No new features. No new art. Get the foundation ready for beta.
 
 ### 1.1 Bug Fixes
 - [x] Scanner SCAN button hover zone misaligned with art
-- [ ] Verify all panel overlays align with art at 960×540
+- [x] Signal/station text positions on desk calibrated
 
 ### 1.2 Dead Code Cleanup
-- [x] Delete orphaned `TimerDisplay.tsx`
-- [x] Remove duplicate `GRID_COLS`/`GRID_ROWS` from `constants.ts`
+- [x] Delete orphaned TimerDisplay.tsx
+- [x] Remove duplicate GRID_COLS/GRID_ROWS from constants.ts
+- [x] Remove unused DIAMETER from RadarSystem.ts
 - [x] Update CLAUDE.md folder structure to match actual files
 
 ### 1.3 Dev Tooling
-- [ ] Add coordinate overlay to debug mode — live mouse x,y on Phaser canvas when debug is active
-- [ ] Verify scenario injection works (debug skip day, debug reset)
+- [ ] Add coordinate overlay to debug mode — live mouse x,y on Phaser
+      canvas when debug is active. Replaces external pixel inspector.
 
-### 1.4 Audio Inventory
-- [ ] Document every sound the game needs: ambience, SFX, music
-- [ ] Define mood, trigger conditions, and priority for each sound
-- [ ] This is a planning document, not implementation
-
-### 1.5 Design Bible
+### 1.4 Design Bible
 - [ ] Screenshot every panel and the desk view
 - [ ] Catalogue every piece of text and button visible in the art
-- [ ] For each element: is it functional? Should it be? What happens on interaction?
-- [ ] Define the rules: if it's in the art, it must be meaningful or removed
-- [ ] This document drives ALL Phase 2 art work
+- [ ] For each: is it functional? Should it be? What happens on interaction?
+- [ ] Define physical controls per tool (what can be operated from desk)
+- [ ] This document drives ALL Phase 2 art work — do not skip
+
+### 1.5 Audio Inventory
+- [ ] List every sound the game needs (ambience, SFX, music)
+- [ ] Define mood, trigger condition, and priority for each
+- [ ] Planning document only — no implementation
 
 ### 1.6 Performance
 - [ ] Verify 60fps throughout full playthrough
-- [ ] Profile any frame drops during transitions or heavy scenes
 
 ### Phase 1 Checklist
 - [ ] All bugs fixed
 - [ ] No dead code
-- [ ] Dev tooling ready
-- [ ] Audio inventory written
+- [ ] Coordinate overlay working in debug mode
 - [ ] Design bible complete
+- [ ] Audio inventory written
 - [ ] 60fps confirmed
 
 ---
 
 ## Phase 2: The Real Game
 
-Three layers, built bottom-up. Each layer depends on the one below it.
+Three layers, bottom-up. Do not start a layer before the previous is solid.
+
+**Tool interaction principle (applies everywhere):**
+- Desk level: physical state visible + basic controls (on/off, frequency dial,
+  sensor position). Art must show this.
+- Panel level: reading and depth. Dialogue, journal, map detail, manual pages.
+  No duplicate controls — except map drag-drop (manipulation, not reading).
+
+---
 
 ### Layer 1: Narrative Frame
 
-Story and onboarding. No art dependencies — can start immediately
-after Phase 1.
+No art or system dependencies. Can start immediately after Phase 1.
 
-#### L1.1 Narrative Premise (Incipit)
-- [ ] Design the story frame that explains why the player is here
-- [ ] Write the incipit text/sequence
-- [ ] The player should understand scan → contact → decide within 90 seconds
-- [ ] Priority: player discovers things on their own, minimal hand-holding
+#### L1.1 Incipit / New Game Intro
+- [ ] Text sequence shown on new game start (same format as morning messages)
+- [ ] Establishes: who the player is, why they're here, what the tools are
+- [ ] Tone: operator briefing, cold and functional — not a tutorial
+- [ ] Player discovers energy system on their own — do not mention it here
+- [ ] Write the sequence text
 
-#### L1.2 New Game Intro Screen
-- [ ] Design the intro sequence for new games
-- [ ] Present the premise, establish stakes
-- [ ] Implement as React overlay sequence before gameplay starts
+#### L1.2 Continue Screen
+- [ ] Text overlay shown when continuing a saved game
+- [ ] Shows: current day, situations active, key decisions made so far
+- [ ] Orients the returning player without replaying the intro
 
-#### L1.3 Continue Screen
-- [ ] Design progress summary for returning players
-- [ ] Show: current day, contacts made, key decisions
-- [ ] Implement as React overlay before gameplay resumes
+#### L1.3 Kael Energy Hint
+- [ ] New dialogue thread in situation2.ts
+- [ ] Triggers after player first runs low on energy (new journal key)
+- [ ] Kael mentions the solar collector on the scanner in passing
+- [ ] Line must feel natural — useful information from a dangerous source
+- [ ] This is the only in-game explanation of solar energy recovery
 
-#### L1.4 Story Improvements
-- [ ] Review and deepen Mara arc (dialogue pacing, ambiguity)
-- [ ] Review and deepen Kael arc (subtle inconsistencies)
-- [ ] Assess whether Situations 3 & 4 belong in beta or post-beta
+---
 
 ### Layer 2: Systems
 
-Foundational mechanics that all art depends on. These must be built
-before Layer 3 — you can't design panel art without knowing the
-energy states.
+These are foundational. All art in Layer 3 depends on knowing the energy
+states. Build in this exact order.
 
-#### L2.1 Energy Management System
-- [ ] Add energy budget to StateManager (finite per day, resets at dawn)
-- [ ] Each tool costs energy to power on
-- [ ] Player chooses what's active — can't run everything at once
-- [ ] Energy state exposed to both Phaser (panel visuals) and React (UI indicators)
-- [ ] Define energy costs per tool and daily budget
+#### L2.1 Energy System
 
-#### L2.2 Map Rework
+**Rules:**
+- Fixed daily budget, resets to 100% at dawn
+- Map drains energy while on (constant)
+- Radio drains energy while on (constant, slower)
+- Scanner pulse costs a flat amount per pulse
+- Each cell scanned recovers a small amount (solar collector on sensor)
+- At zero energy: draining tools go dark, scanner still works (solar recovery)
+
+**Constants to add to constants.ts:**
+```
+ENERGY_MAX          = 100
+ENERGY_DRAIN_MAP    = 0.8   per second
+ENERGY_DRAIN_RADIO  = 0.3   per second
+ENERGY_COST_PULSE   = 2.0   one-time per pulse
+ENERGY_RECOVER_SCAN = 1.5   per cell scanned
+ENERGY_RECHARGE_DAY = 100   full recharge at dawn
+```
+
+**Implementation:**
+- [ ] Add energy to StateManager (current level, drain/recover methods)
+- [ ] Emit events: energy:low (≤20%), energy:depleted, energy:recharged
+- [ ] Add energy constants to constants.ts
+- [ ] BunkerScene: energy drains in update() loop when tools are on
+- [ ] BunkerScene: energy recovers on radar:pulse event (cells scanned × rate)
+- [ ] Desk display: PWR percentage + segmented bar as Phaser text objects
+      (positioned over desk art — new art in Layer 3 will have screen baked in)
+- [ ] Day transition: recharge to 100% at dawn
+
+#### L2.2 Desk-Level Tool Controls
+
+The desk is a physical console. Tools must be operable without opening panels.
+
+- [ ] Map: on/off toggle from desk (click map area when no panel open)
+- [ ] Radio: on/off toggle + frequency ±1 / ±0.1 from desk
+      (small invisible hit zones over art buttons — same pattern as existing
+      frequency display)
+- [ ] Scanner: already operable from desk (SCAN button visible, pulse works)
+- [ ] All desk controls respect energy — toggling on a drained tool does nothing
+- [ ] Panel state persists on close: radio tuned to 97.3 stays at 97.3 on desk
+
+#### L2.3 Map Rework
+
 - [ ] Move map from React overlay to Phaser layer
-- [ ] Implement drag-and-drop sensor token (replaces click-to-place)
-- [ ] Implement drag-and-drop miniatures for marking positions
-- [ ] Map only visible when powered (energy system integration)
-- [ ] Map goes dark/inactive when unpowered
+- [ ] Off state: map art visible but grid dark, elements hidden, not interactive
+- [ ] On state: grid lit, entity markers visible, sensor placement active
+- [ ] Drag-and-drop sensor token (replaces click-to-place)
+- [ ] Drag-and-drop miniatures: player places tokens to mark tracked positions
+      (miniatures persist across tool switches and days)
+- [ ] Map only responds to drag-drop when powered on
+- [ ] Turning map on costs energy (starts draining immediately)
 
-#### L2.3 Radio Contact Identity
-- [ ] New UI element on radio panel showing contact status
-- [ ] Unknown contact: question mark silhouette
-- [ ] During conversation: details gradually revealed
-- [ ] After trust established (or broken): face / identity shown
-- [ ] Connects to the trust/deception core mechanic
+#### L2.4 Radio Contact Identity
+
+- [ ] New state in StateManager: contact identity level per station
+      (unknown → partial → revealed)
+- [ ] Radio panel shows contact panel:
+      - No contact: empty/static
+      - First contact: question mark silhouette
+      - Mid-conversation: details emerge (name, partial face)
+      - Trust established or broken: full face revealed
+- [ ] Identity level advances based on dialogue nodes reached
+- [ ] Hostile contact (Kael) reveals differently — ambiguous longer
+
+---
 
 ### Layer 3: Identity
 
-Art, audio, and character. Built on top of working systems from
-Layer 2. Only start this when Layer 2 is solid.
+Only start after Layer 2 is complete and tested.
 
 #### L3.1 Design Audit & Flavour
-- [ ] Apply design bible rules from Phase 1
-- [ ] Add flavour touches: marker annotations (e.g. exclamation on Friendly tab),
-      handwritten notes, coffee stains, wear marks
-- [ ] Every visible element either does something or tells the player something
-- [ ] Remove any art text/buttons that aren't functional
+- [ ] Apply design bible from Phase 1
+- [ ] Every visible art element is functional or removed
+- [ ] Flavour: marker annotations (exclamation on FRIENDLY tab), handwritten
+      notes, wear marks, coffee stains — each one meaningful
+- [ ] Audit all panel button labels — if it's in the art, it must do something
 
-#### L3.2 Main Menu Rework
-- [ ] New menu art (replace current AI-looking asset)
-- [ ] Credits: Francesco Bacocco, HookDev Games
-- [ ] Clean, intentional design matching bunker aesthetic
+#### L3.2 Map Art
+- [ ] Off state: physical paper map look — worn edges, faded ink, beautiful cold
+- [ ] On state: grid illuminates over the paper, zone overlays appear
+- [ ] Single Phaser asset with two visual modes
+- [ ] Must look intentional and atmospheric even when off
 
-#### L3.3 Opening Screen & Splash
+#### L3.3 Panel Art Rework
+- [ ] All panels redesigned around three states: on, off, low-power
+- [ ] Off: dark, physically powered down
+- [ ] Low-power: flickering or dim indicators
+- [ ] On: fully lit, functional
+- [ ] Desk surface updated with battery/power screen area
+
+#### L3.4 Main Menu & Opening
+- [ ] New menu art (current asset too AI-looking)
 - [ ] HookDev Games hook animation on boot
-- [ ] Transition from splash → main menu
-- [ ] Update existing SplashScreen.tsx
-
-#### L3.4 Panel Art Rework
-- [ ] Every panel redesigned around energy states (on / off / low power)
-- [ ] Consistent Cold War bunker aesthetic across all panels
-- [ ] Off state: dark, inactive, physically powered down
-- [ ] On state: lit, functional, equipment hum
+- [ ] Credits: Francesco Bacocco / HookDev Games
+- [ ] Transition: splash → menu
 
 #### L3.5 Scanner Visual Rework
 - [ ] Rotating sweep line (sonar-style)
 - [ ] CRT phosphor glow effect
-- [ ] Subtle scanlines
-- [ ] Must feel like Cold War military hardware
+- [ ] Scanlines
+- [ ] Cold War military hardware feel
 
-#### L3.6 Paper Map Art
-- [ ] Hand-drawn pixel art textures for the Phaser map layer
-- [ ] Worn edges, faded zones, handwritten font for zone names
-- [ ] Landmarks as sketched icons
-- [ ] Physical document feel — not a UI element
-
-#### L3.7 Audio Implementation
-- [ ] Background ambience: bunker hum, ventilation, distant drips
-- [ ] Radar: sonar ping on pulse
-- [ ] Radio: static when scanning, clean tone on signal lock, crackle on dialogue
-- [ ] Timer: subtle tick, warning tone approaching day end
-- [ ] Day transition: power-down / startup sounds
-- [ ] Music: tension tracks, quiet moments
+#### L3.6 Audio Implementation
+- [ ] From Phase 1 inventory — implement in priority order
+- [ ] Ambience first (sets the room), SFX second, music last
 
 ### Phase 2 Checklist
-- [ ] Narrative intro plays on new game — player understands the situation
-- [ ] Continue screen shows progress summary
-- [ ] Energy system forces meaningful tool choices
-- [ ] Map is a Phaser layer with drag-and-drop tokens
+- [ ] Incipit plays on new game
+- [ ] Continue screen shows correct progress
+- [ ] Energy system forces real choices — map vs radio tradeoff is felt
+- [ ] Solar recovery works and Kael's hint makes sense in context
+- [ ] Desk controls work for all tools
+- [ ] Map is Phaser layer with drag-drop tokens
 - [ ] Radio shows contact identity progression
-- [ ] All art consistent and meaningful
+- [ ] All art consistent, meaningful, no dead buttons
 - [ ] Audio reinforces atmosphere
-- [ ] Full playthrough with both situations — no bugs
+- [ ] Full playthrough — no bugs
 
 ---
 
 ## Future Expansions (Post-Beta)
 
-- [ ] **Full Technical Manual** — browsable, multi-page, partially damaged entries
-- [ ] **Distance Zones (Far/Mid/Near)** — radar echo detail varies by distance
-- [ ] **Ambient Intercept** — audio + text fragments when entity is in Near zone
-- [ ] **Situation 3: Small Good Group** — pair with internal dynamics
-- [ ] **Situation 4: Small Hostile Group** — can eliminate good group
-- [ ] **Cross-Situation Dynamics** — radar shows all entities, player reveals/conceals
-- [ ] **First-Person Bunker View** — upgrade desk to full first-person perspective
-- [ ] **3-5 Day Campaigns** — extend from 3 days to full length
-- [ ] **Progressive Game Over** — three hostiles knowing location = compromised
+- [ ] **Full Technical Manual** — browsable, multi-page, partially damaged
+- [ ] **Distance Zones (Far/Mid/Near)** — radar echo detail by distance
+- [ ] **Ambient Intercept** — audio + text in Near zone
+- [ ] **Situations 3 & 4** — groups, cross-referencing accounts
+- [ ] **Cross-Situation Dynamics** — all entities visible on radar
+- [ ] **First-Person Bunker View** — full perspective with transitions
+- [ ] **Battery Room** — physical room behind player, visible by turning back
+- [ ] **Progressive Game Over** — three hostiles = bunker compromised
+- [ ] **3-5 Day Campaigns**
