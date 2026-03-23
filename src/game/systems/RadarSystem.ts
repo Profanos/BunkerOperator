@@ -1,132 +1,239 @@
-/** Pulse logic, echo detection, range checking — renders CRT radar display */
+/** Grid scanner — full-screen AN/VPS-1 panel with 6 readout windows */
 
 import Phaser from 'phaser';
 import { StateManager } from '../../shared/StateManager.ts';
 import { EventBridge } from '../../shared/EventBridge.ts';
-import { SENSOR_RANGE, CANVAS_WIDTH, CANVAS_HEIGHT, ECHO_FADE_MS, formatGameTime } from '../../shared/constants.ts';
-import { gridLabel, gridDistance, RADIO_STATIONS, type RadioStation } from '../../shared/territory.ts';
-import type { GridPosition, EntityState } from '../../shared/types.ts';
+import { SENSOR_RANGE, ECHO_FADE_MS, formatGameTime } from '../../shared/constants.ts';
+import { gridLabel, gridDistance, RADIO_STATIONS, LANDMARKS, GRID_COLS, GRID_ROWS, type RadioStation } from '../../shared/territory.ts';
+import type { GridPosition, EntityState, RadarContact } from '../../shared/types.ts';
 
-interface Echo {
-  blip: Phaser.GameObjects.Arc;
+/** ─────────────────────────────────────────────────────────────────────────
+ *  SCANNER CONFIG — all overlay positions for the AN/VPS-1 panel asset.
+ *
+ *  How to measure: open scanner_panel.png at native 960×540 (1:1 pixels).
+ *  grid.x/y     = top-left corner of the 5×5 cell grid inside the scope
+ *  readouts     = center of each dark readout window
+ *  scanButton   = center + size of the SCAN button area
+ *  ─────────────────────────────────────────────────────────────────────── */
+const SCANNER_CONFIG = {
+  /** Size of one grid cell in pixels — 5×5 grid total = cellSize*5 × cellSize*5.
+   *  Scope radius=205, diameter=411, art grid fills ~80% → ~58px per cell. */
+  cellSize: 54,
+
+  /** Scope center=(289,267), outer radius≈201px, bezel ~6px → usable ≈195px.
+   *  Corner distance = 135*√2 = 191px < 195px — fits cleanly.
+   *  grid top-left = center - (cellSize*5/2) = (289-135, 267-135) */
+  grid: { x: 154, y: 132 },
+
+  /** Invisible hit zone over the art SCAN button.
+   *  Window x range 647–941 → center x=794. Button sits at bottom of right panel. */
+  scanButton: { x: 794, y: 510, w: 294, h: 45 },
+
+  /** Center of each dark readout window — all share center x=794.
+   *  Y values evenly spaced from SENSOR top (y≈79) with ~68px per section. */
+  readouts: {
+    sensor:   { x: 795, y: 93  },
+    friendly: { x: 795, y: 158 },
+    hostile:  { x: 795, y: 220 },
+    status:   { x: 795, y: 283 },
+    lastScan: { x: 795, y: 346 },
+    relay:    { x: 795, y: 409 },
+  },
+} as const;
+
+const DIAMETER = SENSOR_RANGE * 2 + 1; // 5
+
+// Cell color palette — tuned to sit on the dark green scope glass
+const C_CELL_OOB       = 0x000000; // outside grid — fully black
+const C_CELL_OUT_RANGE = 0x050a05; // corner cells outside scan radius
+const C_CELL_IN_RANGE  = 0x070e07; // active scan cells — barely visible tint
+const C_CELL_SENSOR    = 0x0d2010; // center cell — slightly brighter green
+const C_CELL_FLASH     = 0x1a3a1a; // pulse flash — visible but not harsh
+const C_BORDER         = 0x1a2a1a; // grid lines — faint green to match scope
+const C_BORDER_SENSOR  = 0x4aff4a; // sensor cell border — bright green, stands out
+
+interface ScanCell {
+  relCol: number;
+  relRow: number;
+  inRange: boolean;
+  bg: Phaser.GameObjects.Rectangle;
+  border: Phaser.GameObjects.Rectangle;
+  label: Phaser.GameObjects.Text;
+  gridPos: GridPosition | null;
+}
+
+interface Blip {
+  circle: Phaser.GameObjects.Arc;
   createdAt: number;
 }
 
-const RADAR_CENTER_X = CANVAS_WIDTH / 2;
-const RADAR_CENTER_Y = CANVAS_HEIGHT / 2 - 20;
-const RADAR_RADIUS = 180;
-const PIXELS_PER_CELL = RADAR_RADIUS / SENSOR_RANGE;
-
 export class RadarSystem {
   private scene: Phaser.Scene;
-  /** Static background objects — shown/hidden as a group */
-  private staticObjects: Phaser.GameObjects.GameObject[] = [];
-  /** Dynamic objects — blips and pulse ring, managed separately */
-  private echoes: Echo[] = [];
-  private pulseGraphics: Phaser.GameObjects.Graphics;
-  private pulseTween: Phaser.Tweens.Tween | null = null;
-  private pulseProgress = { t: 0 };
-  private noEchoText: Phaser.GameObjects.Text;
-  private pulseButton: Phaser.GameObjects.Text;
+  private cells: ScanCell[] = [];
+  private blips: Blip[] = [];
+  private allObjects: Phaser.GameObjects.GameObject[] = [];
   private visible = false;
+  private lastSensorPos: GridPosition | null = null;
+
+  // Named readout text objects
+  private roSensor!:   Phaser.GameObjects.Text;
+  private roFriendly!: Phaser.GameObjects.Text;
+  private roHostile!:  Phaser.GameObjects.Text;
+  private roStatus!:   Phaser.GameObjects.Text;
+  private roLastScan!: Phaser.GameObjects.Text;
+  private roRelay!:    Phaser.GameObjects.Text;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+    this.buildUI();
+    this.setAllVisible(false);
+  }
 
-    // CRT background circle
-    const bg = scene.add.circle(RADAR_CENTER_X, RADAR_CENTER_Y, RADAR_RADIUS + 10, 0x0a1a0a)
-      .setStrokeStyle(2, 0x2a4a2a).setDepth(50);
-    this.staticObjects.push(bg);
+  private buildUI(): void {
+    const { grid, readouts, scanButton, cellSize } = SCANNER_CONFIG;
 
-    // Range rings
-    for (let i = 1; i <= SENSOR_RANGE; i++) {
-      const ring = scene.add.circle(RADAR_CENTER_X, RADAR_CENTER_Y, i * PIXELS_PER_CELL)
-        .setStrokeStyle(1, 0x1a3a1a).setFillStyle().setDepth(50);
-      this.staticObjects.push(ring);
+    // ── 5×5 grid cells ──────────────────────────────────────────────────
+    for (let relRow = -SENSOR_RANGE; relRow <= SENSOR_RANGE; relRow++) {
+      for (let relCol = -SENSOR_RANGE; relCol <= SENSOR_RANGE; relCol++) {
+        const px = grid.x + (relCol + SENSOR_RANGE) * cellSize;
+        const py = grid.y + (relRow + SENSOR_RANGE) * cellSize;
+        const cx = px + cellSize / 2;
+        const cy = py + cellSize / 2;
+
+        const dist = Math.sqrt(relCol * relCol + relRow * relRow);
+        const inRange = dist <= SENSOR_RANGE;
+
+        const bg = this.scene.add.rectangle(cx, cy, cellSize - 1, cellSize - 1, C_CELL_OOB).setDepth(50);
+        const border = this.scene.add.rectangle(cx, cy, cellSize, cellSize)
+          .setStrokeStyle(1, C_BORDER).setFillStyle().setDepth(50);
+        const label = this.scene.add.text(cx, cy, '', {
+          fontSize: '10px', color: '#1a3a1a', fontFamily: 'monospace',
+        }).setOrigin(0.5).setDepth(51);
+
+        this.allObjects.push(bg, border, label);
+        this.cells.push({ relCol, relRow, inRange, bg, border, label, gridPos: null });
+      }
     }
 
-    // Crosshairs
-    const hLine = scene.add.line(0, 0,
-      RADAR_CENTER_X - RADAR_RADIUS, RADAR_CENTER_Y,
-      RADAR_CENTER_X + RADAR_RADIUS, RADAR_CENTER_Y,
-      0x1a3a1a
-    ).setOrigin(0, 0).setDepth(50);
-    const vLine = scene.add.line(0, 0,
-      RADAR_CENTER_X, RADAR_CENTER_Y - RADAR_RADIUS,
-      RADAR_CENTER_X, RADAR_CENTER_Y + RADAR_RADIUS,
-      0x1a3a1a
-    ).setOrigin(0, 0).setDepth(50);
-    this.staticObjects.push(hLine, vLine);
+    // ── Readout text objects ────────────────────────────────────────────
+    const roStyle = { fontSize: '13px', color: '#4aff4a', fontFamily: 'monospace', fontStyle: 'bold' };
+    const ro = readouts;
 
-    // Center dot
-    const centerDot = scene.add.circle(RADAR_CENTER_X, RADAR_CENTER_Y, 3, 0x4aff4a).setDepth(51);
-    this.staticObjects.push(centerDot);
+    this.roSensor   = this.scene.add.text(ro.sensor.x,   ro.sensor.y,   '—', roStyle).setOrigin(0.5).setDepth(51);
+    this.roFriendly = this.scene.add.text(ro.friendly.x, ro.friendly.y, '—', roStyle).setOrigin(0.5).setDepth(51);
+    this.roHostile  = this.scene.add.text(ro.hostile.x,  ro.hostile.y,  '—', roStyle).setOrigin(0.5).setDepth(51);
+    this.roStatus   = this.scene.add.text(ro.status.x,   ro.status.y,   'READY', roStyle).setOrigin(0.5).setDepth(51);
+    this.roLastScan = this.scene.add.text(ro.lastScan.x, ro.lastScan.y, '—', roStyle).setOrigin(0.5).setDepth(51);
+    this.roRelay    = this.scene.add.text(ro.relay.x,    ro.relay.y,    'CLEAR', roStyle).setOrigin(0.5).setDepth(51);
 
-    // Pulse ring — drawn via Graphics so we control radius manually
-    this.pulseGraphics = scene.add.graphics().setDepth(52);
-    this.staticObjects.push(this.pulseGraphics);
+    this.allObjects.push(
+      this.roSensor, this.roFriendly, this.roHostile,
+      this.roStatus, this.roLastScan, this.roRelay,
+    );
 
-    // Status text
-    this.noEchoText = scene.add.text(RADAR_CENTER_X, RADAR_CENTER_Y + RADAR_RADIUS + 28, '', {
-      fontSize: '13px',
-      color: '#4a8a4a',
-      fontFamily: 'monospace',
-    }).setOrigin(0.5).setDepth(51);
-    this.staticObjects.push(this.noEchoText);
+    // ── Invisible SCAN button hit zone over the art button ──────────────
+    const btn = this.scene.add.rectangle(
+      scanButton.x, scanButton.y, scanButton.w, scanButton.h,
+    ).setFillStyle(0x000000, 0).setDepth(51).setInteractive({ useHandCursor: true });
 
-    // Pulse button
-    this.pulseButton = scene.add.text(
-      RADAR_CENTER_X, RADAR_CENTER_Y + RADAR_RADIUS + 52,
-      '[ PULSE ]',
-      { fontSize: '16px', color: '#4aff4a', fontFamily: 'monospace', fontStyle: 'bold' }
-    ).setOrigin(0.5).setDepth(51).setInteractive({ useHandCursor: true });
-    this.pulseButton.on('pointerdown', () => this.pulse());
-    this.pulseButton.on('pointerover', () => this.pulseButton.setColor('#8aff8a'));
-    this.pulseButton.on('pointerout', () => this.pulseButton.setColor('#4aff4a'));
-    this.staticObjects.push(this.pulseButton);
-
-    // Start hidden
-    this.setAllVisible(false);
+    btn.on('pointerdown', () => this.pulse());
+    btn.on('pointerover', () => btn.setFillStyle(0x4aff4a, 0.08));
+    btn.on('pointerout',  () => btn.setFillStyle(0x000000, 0));
+    this.allObjects.push(btn);
   }
 
   show(): void {
     this.visible = true;
     this.setAllVisible(true);
+    this.lastSensorPos = null;
+    this.rebuildCells();
+    this.syncSensorReadout();
   }
 
   hide(): void {
     this.visible = false;
     this.setAllVisible(false);
-    // Hide blips too
-    for (const echo of this.echoes) echo.blip.setVisible(false);
+    for (const blip of this.blips) blip.circle.setVisible(false);
   }
 
   private setAllVisible(v: boolean): void {
-    for (const obj of this.staticObjects) {
+    for (const obj of this.allObjects) {
       (obj as Phaser.GameObjects.GameObject & { setVisible: (v: boolean) => void }).setVisible(v);
     }
+    for (const blip of this.blips) blip.circle.setVisible(v);
+  }
+
+  private rebuildCells(): void {
+    const sensorPos = StateManager.getState().sensorPosition;
+
+    if (!sensorPos) {
+      this.roSensor.setText('NO SENSOR');
+      this.roStatus.setText('NO SENSOR');
+      for (const cell of this.cells) {
+        cell.bg.setFillStyle(C_CELL_OOB);
+        cell.border.setStrokeStyle(1, C_BORDER);
+        cell.label.setText('');
+        cell.gridPos = null;
+      }
+      return;
+    }
+
+    this.syncSensorReadout();
+
+    for (const cell of this.cells) {
+      const absCol = sensorPos.col + cell.relCol;
+      const absRow = sensorPos.row + cell.relRow;
+      const inBounds = absCol >= 0 && absCol < GRID_COLS && absRow >= 0 && absRow < GRID_ROWS;
+
+      if (!inBounds) {
+        cell.gridPos = null;
+        cell.bg.setFillStyle(C_CELL_OOB);
+        cell.border.setStrokeStyle(1, C_BORDER);
+        cell.label.setText('');
+      } else if (cell.relCol === 0 && cell.relRow === 0) {
+        cell.gridPos = { col: absCol, row: absRow };
+        cell.bg.setFillStyle(C_CELL_SENSOR);
+        cell.border.setStrokeStyle(2, C_BORDER_SENSOR);
+        cell.label.setText(gridLabel({ col: absCol, row: absRow })).setColor('#4aff4a');
+      } else if (cell.inRange) {
+        cell.gridPos = { col: absCol, row: absRow };
+        cell.bg.setFillStyle(C_CELL_IN_RANGE);
+        cell.border.setStrokeStyle(1, C_BORDER);
+        cell.label.setText(gridLabel({ col: absCol, row: absRow })).setColor('#1a3a1a');
+      } else {
+        cell.gridPos = { col: absCol, row: absRow };
+        cell.bg.setFillStyle(C_CELL_OUT_RANGE);
+        cell.border.setStrokeStyle(1, C_BORDER);
+        cell.label.setText(gridLabel({ col: absCol, row: absRow })).setColor('#0d1a0d');
+      }
+    }
+  }
+
+  private syncSensorReadout(): void {
+    const sensorPos = StateManager.getState().sensorPosition;
+    if (!sensorPos) return;
+    this.roSensor.setText(gridLabel(sensorPos));
   }
 
   private pulse(): void {
     const sensorPos = StateManager.getState().sensorPosition;
     if (!sensorPos) {
-      this.noEchoText.setText('NO SENSOR PLACED');
+      this.roStatus.setText('NO SENSOR');
       return;
     }
 
-    // Clear previous echoes
-    this.clearEchoes();
+    this.roStatus.setText('SCANNING...');
+    this.clearBlips();
+    this.flashInRangeCells();
 
-    // Animate pulse ring
-    this.animatePulse();
-
-    // Detect entities in range
     const entities = StateManager.getState().entities;
-    const inRange = entities.filter(
+    const inRange  = entities.filter(
       (e) => e.alive && gridDistance(e.position, sensorPos) <= SENSOR_RANGE
     );
 
-    // Check for newly discoverable stations before logging — needed for status text
+    const friendly = inRange.filter((e) => e.type === 'survivor');
+    const hostile  = inRange.filter((e) => e.type === 'zombie');
+
     const currentJournal = StateManager.getState().journal;
     const newStations = RADIO_STATIONS.filter(
       (s) =>
@@ -134,78 +241,117 @@ export class RadarSystem {
         !currentJournal.some((e) => e.key === `radar:discovered_${s.id}`)
     );
 
-    if (inRange.length === 0) {
-      this.noEchoText.setText('NO ECHOES');
-    } else {
-      this.noEchoText.setText(`${inRange.length} ECHO${inRange.length > 1 ? 'ES' : ''} DETECTED`);
-      for (const entity of inRange) {
-        const bx = RADAR_CENTER_X + (entity.position.col - sensorPos.col) * PIXELS_PER_CELL;
-        const by = RADAR_CENTER_Y + (entity.position.row - sensorPos.row) * PIXELS_PER_CELL;
-        // Green for survivors, red for zombies — player needs type visibility to make guidance decisions
-        const color = entity.type === 'survivor' ? 0x4aff4a : 0xff4a4a;
-        const blip = this.scene.add.circle(bx, by, 5, color).setDepth(53);
-        this.echoes.push({ blip, createdAt: Date.now() });
+    // Discover landmarks
+    const discovered = StateManager.getState().discoveredLandmarks;
+    const newLandmarks = LANDMARKS.filter(
+      (l) =>
+        gridDistance(sensorPos, l.position) <= SENSOR_RANGE &&
+        !discovered.includes(l.id)
+    );
+    for (const l of newLandmarks) {
+      StateManager.discoverLandmark(l.id);
+      StateManager.addJournalEntry({
+        key: `radar:landmark_${l.id}`,
+        timestamp: Date.now(),
+        day: StateManager.getState().currentDay,
+        timeStr: formatGameTime(StateManager.getState().timeRemaining),
+        text: `Scanner confirmed: ${l.name} at ${gridLabel(l.position)} — ${l.description}`,
+      });
+    }
+
+    // Update readouts — these persist until next scan
+    const timeStr = formatGameTime(StateManager.getState().timeRemaining);
+    this.roFriendly.setText(friendly.length.toString().padStart(2, '0'));
+    this.roHostile.setText(hostile.length.toString().padStart(2, '0'));
+    this.roLastScan.setText(timeStr);
+    this.roRelay.setText(newStations.length > 0 ? newStations.map((s) => s.name).join(' / ') : 'CLEAR');
+
+    // Resolve status after flash
+    this.scene.time.delayedCall(400, () => {
+      if (inRange.length === 0) {
+        this.roStatus.setText('NO CONTACTS');
+      } else {
+        this.roStatus.setText(`${inRange.length} CONTACT${inRange.length > 1 ? 'S' : ''}`);
       }
+    });
+
+    for (const entity of inRange) {
+      this.spawnBlip(entity, sensorPos);
     }
 
     this.logPulse(sensorPos, inRange, newStations);
     EventBridge.emit('radar:pulse', sensorPos);
   }
 
-  private animatePulse(): void {
-    // Stop any running tween
-    if (this.pulseTween) {
-      this.pulseTween.stop();
-      this.pulseTween = null;
+  private flashInRangeCells(): void {
+    for (const cell of this.cells) {
+      if (!cell.inRange || cell.gridPos === null) continue;
+      const base = cell.relCol === 0 && cell.relRow === 0 ? C_CELL_SENSOR : C_CELL_IN_RANGE;
+      cell.bg.setFillStyle(C_CELL_FLASH);
+      this.scene.time.delayedCall(350, () => {
+        if (this.visible) cell.bg.setFillStyle(base);
+      });
     }
-    this.pulseGraphics.clear();
-    this.pulseProgress.t = 0;
-
-    this.pulseTween = this.scene.tweens.add({
-      targets: this.pulseProgress,
-      t: 1,
-      duration: 700,
-      ease: 'Cubic.easeOut',
-      onUpdate: () => {
-        const r = this.pulseProgress.t * RADAR_RADIUS;
-        const alpha = 1 - this.pulseProgress.t;
-        this.pulseGraphics.clear();
-        if (this.visible) {
-          this.pulseGraphics.lineStyle(2, 0x4aff4a, alpha);
-          this.pulseGraphics.strokeCircle(RADAR_CENTER_X, RADAR_CENTER_Y, r);
-        }
-      },
-      onComplete: () => {
-        this.pulseGraphics.clear();
-        this.pulseTween = null;
-      },
-    });
   }
 
-  private clearEchoes(): void {
-    for (const echo of this.echoes) echo.blip.destroy();
-    this.echoes = [];
-    this.noEchoText.setText('');
+  private spawnBlip(entity: EntityState, sensorPos: GridPosition): void {
+    const { grid } = SCANNER_CONFIG;
+    const relCol = entity.position.col - sensorPos.col;
+    const relRow = entity.position.row - sensorPos.row;
+    const { cellSize } = SCANNER_CONFIG;
+    const cx = grid.x + (relCol + SENSOR_RANGE) * cellSize + cellSize / 2;
+    const cy = grid.y + (relRow + SENSOR_RANGE) * cellSize + cellSize / 2;
+
+    const color = entity.type === 'survivor' ? 0x4aff4a : 0xff4a4a;
+    const circle = this.scene.add.circle(cx, cy, 7, color).setDepth(53);
+    this.blips.push({ circle, createdAt: Date.now() });
+
+    const state = StateManager.getState();
+    const contact: RadarContact = {
+      entityId: entity.id,
+      type: entity.type,
+      position: { ...entity.position },
+      day: state.currentDay,
+      timeStr: formatGameTime(state.timeRemaining),
+    };
+    StateManager.setRadarContact(contact);
+  }
+
+  /** Only destroys blips — readout values persist until next scan */
+  private clearBlips(): void {
+    for (const blip of this.blips) blip.circle.destroy();
+    this.blips = [];
   }
 
   update(): void {
     if (!this.visible) return;
+
+    const sensorPos = StateManager.getState().sensorPosition;
+    const changed =
+      sensorPos !== this.lastSensorPos &&
+      (sensorPos === null ||
+        this.lastSensorPos === null ||
+        sensorPos.col !== this.lastSensorPos.col ||
+        sensorPos.row !== this.lastSensorPos.row);
+    if (changed) {
+      this.lastSensorPos = sensorPos;
+      this.rebuildCells();
+    }
+
+    // Fade blips over ECHO_FADE_MS
     const now = Date.now();
-    this.echoes = this.echoes.filter((echo) => {
-      const age = now - echo.createdAt;
-      if (age > ECHO_FADE_MS) {
-        echo.blip.destroy();
-        return false;
-      }
-      echo.blip.setAlpha(1 - age / ECHO_FADE_MS);
+    this.blips = this.blips.filter((blip) => {
+      const age = now - blip.createdAt;
+      if (age > ECHO_FADE_MS) { blip.circle.destroy(); return false; }
+      blip.circle.setAlpha(1 - age / ECHO_FADE_MS);
       return true;
     });
   }
 
   private logPulse(sensorPos: GridPosition, inRange: EntityState[], newStations: RadioStation[]): void {
-    const state = StateManager.getState();
+    const state   = StateManager.getState();
     const timeStr = formatGameTime(state.timeRemaining);
-    const now = Date.now();
+    const now     = Date.now();
 
     if (inRange.length === 0) {
       StateManager.addJournalEntry({
@@ -213,41 +359,36 @@ export class RadarSystem {
         timestamp: now,
         day: state.currentDay,
         timeStr,
-        text: `Radar pulse at ${gridLabel(sensorPos)}: no echoes detected.`,
+        text: `Scanner pulse at ${gridLabel(sensorPos)}: no contacts detected.`,
       });
     } else {
-      // One entry per entity — key is radar:seen_<entityId> so dialogue can check
-      // whether the player has ever detected a specific entity on radar
       for (const entity of inRange) {
         StateManager.addJournalEntry({
           key: `radar:seen_${entity.id}`,
           timestamp: now,
           day: state.currentDay,
           timeStr,
-          text: `Radar pulse at ${gridLabel(sensorPos)}: ${entity.type} echo at ${gridLabel(entity.position)}.`,
+          text: `Scanner pulse at ${gridLabel(sensorPos)}: ${entity.type} contact at ${gridLabel(entity.position)}.`,
         });
       }
     }
 
-    // Log newly discovered stations — newStations already filtered to exclude prior discoveries
     for (const station of newStations) {
       StateManager.addJournalEntry({
         key: `radar:discovered_${station.id}`,
         timestamp: now,
         day: state.currentDay,
         timeStr,
-        text: `Radar scan at ${gridLabel(sensorPos)}: relay equipment detected — ${station.name}, ${station.frequency.toFixed(1)} MHz.`,
+        text: `Scanner pulse at ${gridLabel(sensorPos)}: relay equipment detected — ${station.name}, ${station.frequency.toFixed(1)} MHz.`,
       });
     }
+  }
 
-    // Update status text to include relay acquisition feedback
-    if (newStations.length > 0) {
-      const names = newStations.map((s) => s.name).join(', ');
-      const echoLine = inRange.length > 0
-        ? `${inRange.length} ECHO${inRange.length > 1 ? 'ES' : ''} DETECTED`
-        : 'NO ECHOES';
-      this.noEchoText.setText(`${echoLine}\nRELAY ACQUIRED: ${names}`);
+  destroy(): void {
+    for (const obj of this.allObjects) {
+      (obj as Phaser.GameObjects.GameObject & { destroy: () => void }).destroy();
     }
+    for (const blip of this.blips) blip.circle.destroy();
+    this.blips = [];
   }
 }
-

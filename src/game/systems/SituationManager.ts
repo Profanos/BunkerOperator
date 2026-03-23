@@ -1,110 +1,40 @@
-/** Manages entities, their scripted paths, and position advancement over time */
+/** Situation engine — advances entities along day-indexed scripted paths, checks collisions */
 
 import { EventBridge } from '../../shared/EventBridge.ts';
 import { StateManager } from '../../shared/StateManager.ts';
 import { ENTITY_MOVE_INTERVAL, formatGameTime } from '../../shared/constants.ts';
 import { gridLabel } from '../../shared/territory.ts';
-import type { GridPosition, EntityState } from '../../shared/types.ts';
-
-export interface EntityPath {
-  id: string;
-  situationId: string;
-  type: 'survivor' | 'zombie';
-  dayPath: GridPosition[];
-  /** Optional safe route — used when radio:survivor_warned is in journal */
-  safeDayPath?: GridPosition[];
-  nightPath: GridPosition[];
-  speed: number;
-}
-
-/**
- * Test entities for the pressure test scenario (Milestone 4.4):
- *
- * Survivor "Mara" lingers at Relay North (D3) for 12 steps, then walks
- * toward Relay East through F5 — which the zombie occupies from step 5–13.
- * Collision occurs at step 13 (t≈52s) if the player hasn't warned her.
- *
- * Warning: choose the zombie warning option in the radio dialogue →
- * writes radio:survivor_warned → survivor switches to safeDayPath (bypasses F5).
- *
- * Zombie lingers at F5 (col:5, row:4) from step 5 onward to create a
- * clear, detectable threat on radar.
- */
-export const TEST_ENTITIES: EntityPath[] = [
-  {
-    id: 'survivor_test',
-    situationId: 'test',
-    type: 'survivor',
-    dayPath: [
-      // Linger at Relay North — player has time to detect zombie and radio a warning
-      { col: 3, row: 2 }, { col: 3, row: 2 }, { col: 3, row: 2 }, { col: 3, row: 2 },
-      { col: 3, row: 2 }, { col: 3, row: 2 }, { col: 3, row: 2 }, { col: 3, row: 2 },
-      { col: 3, row: 2 }, { col: 3, row: 2 }, { col: 3, row: 2 }, { col: 3, row: 2 },
-      // Moves toward Relay East — step 13 passes through F5 (danger zone)
-      { col: 4, row: 3 },
-      { col: 5, row: 4 }, // ← COLLISION if zombie still here and no warning given
-      { col: 6, row: 5 },
-      { col: 7, row: 6 }, // Relay East
-    ],
-    safeDayPath: [
-      // Same long linger
-      { col: 3, row: 2 }, { col: 3, row: 2 }, { col: 3, row: 2 }, { col: 3, row: 2 },
-      { col: 3, row: 2 }, { col: 3, row: 2 }, { col: 3, row: 2 }, { col: 3, row: 2 },
-      { col: 3, row: 2 }, { col: 3, row: 2 }, { col: 3, row: 2 }, { col: 3, row: 2 },
-      // Safe northern route — avoids F5 entirely
-      { col: 4, row: 2 },
-      { col: 5, row: 2 },
-      { col: 6, row: 3 },
-      { col: 7, row: 6 }, // Relay East
-    ],
-    nightPath: [{ col: 7, row: 6 }, { col: 6, row: 7 }],
-    speed: 1,
-  },
-  {
-    id: 'zombie_test',
-    situationId: 'test',
-    type: 'zombie',
-    dayPath: [
-      // Approaches from northeast
-      { col: 7, row: 1 },
-      { col: 7, row: 2 },
-      { col: 6, row: 2 },
-      { col: 6, row: 3 },
-      { col: 5, row: 3 },
-      // Lingers at F5 (col:5, row:4) — step 5 through 13
-      // Survivor arrives here at step 13 → collision if not warned
-      { col: 5, row: 4 }, { col: 5, row: 4 }, { col: 5, row: 4 }, { col: 5, row: 4 },
-      { col: 5, row: 4 }, { col: 5, row: 4 }, { col: 5, row: 4 }, { col: 5, row: 4 },
-      { col: 5, row: 4 },
-      // Continues south
-      { col: 5, row: 5 },
-      { col: 4, row: 6 },
-    ],
-    nightPath: [{ col: 4, row: 6 }, { col: 3, row: 7 }],
-    speed: 1,
-  },
-];
+import type { EntityPath, EntityState } from '../../shared/types.ts';
 
 export class SituationManager {
   private entityPaths: EntityPath[] = [];
   private moveTimer = 0;
 
+  /** Start a new run — positions entities at dayPaths[1][0] */
   init(entities: EntityPath[]): void {
     this.entityPaths = entities;
     this.moveTimer = 0;
+    EventBridge.on('debug:step', this.onDebugStep);
 
     const states: EntityState[] = entities.map((e) => ({
       id: e.id,
       situationId: e.situationId,
       type: e.type,
-      position: { ...e.dayPath[0] },
+      position: { ...e.dayPaths[1][0] },
       currentPathIndex: 0,
       alive: true,
     }));
     StateManager.setEntities(states);
   }
 
-  /** Called each frame with delta in seconds */
+  /** Restore from a save — uses saved positions instead of resetting to path start */
+  restore(entities: EntityPath[], savedStates: EntityState[]): void {
+    this.entityPaths = entities;
+    this.moveTimer = 0;
+    EventBridge.on('debug:step', this.onDebugStep);
+    StateManager.setEntities(savedStates);
+  }
+
   update(deltaSec: number): void {
     this.moveTimer += deltaSec;
     if (this.moveTimer < ENTITY_MOVE_INTERVAL) return;
@@ -113,9 +43,10 @@ export class SituationManager {
   }
 
   private advanceEntities(): void {
-    const entities = [...StateManager.getState().entities];
-    const journal = StateManager.getState().journal;
-    const warningGiven = journal.some((e) => e.key === 'radio:survivor_warned');
+    const state = StateManager.getState();
+    const entities = [...state.entities];
+    const journal = state.journal;
+    const currentDay = state.currentDay;
     let changed = false;
 
     for (let i = 0; i < entities.length; i++) {
@@ -125,24 +56,35 @@ export class SituationManager {
       const pathData = this.entityPaths.find((p) => p.id === entity.id);
       if (!pathData) continue;
 
-      // Warned survivors switch to safe path if one exists
-      const path =
-        entity.type === 'survivor' && warningGiven && pathData.safeDayPath
-          ? pathData.safeDayPath
-          : pathData.dayPath;
+      // No path defined for this day — entity stays put
+      const basePath = pathData.dayPaths[currentDay];
+      if (!basePath) continue;
+
+      // Check alternatePaths — first journal key match with a day entry wins
+      let activePath = basePath;
+      if (pathData.alternatePaths) {
+        for (const [key, dayMap] of Object.entries(pathData.alternatePaths)) {
+          if (journal.some((e) => e.key === key)) {
+            const altPath = dayMap[currentDay];
+            if (altPath) {
+              activePath = altPath;
+              break;
+            }
+          }
+        }
+      }
 
       const nextIndex = entity.currentPathIndex + 1;
-      if (nextIndex < path.length) {
+      if (nextIndex < activePath.length) {
         entities[i] = {
           ...entity,
           currentPathIndex: nextIndex,
-          position: { ...path[nextIndex] },
+          position: { ...activePath[nextIndex] },
         };
         changed = true;
       }
     }
 
-    // Check for survivor/zombie collisions after moving
     changed = this.checkCollisions(entities) || changed;
 
     if (changed) {
@@ -151,7 +93,6 @@ export class SituationManager {
     }
   }
 
-  /** Returns true if any entity state was changed (e.g. survivor marked dead) */
   private checkCollisions(entities: EntityState[]): boolean {
     const survivors = entities.filter((e) => e.alive && e.type === 'survivor');
     const zombies = entities.filter((e) => e.alive && e.type === 'zombie');
@@ -184,29 +125,37 @@ export class SituationManager {
     return changed;
   }
 
-  /** Advance entities along night paths — called during day transition */
+  /** Advance entities by exactly one tick — wired directly to debug:step event */
+  private readonly onDebugStep = (): void => {
+    this.advanceEntities();
+  };
+
+  destroy(): void {
+    EventBridge.off('debug:step', this.onDebugStep);
+  }
+
+  /** Move entities to end of their night path for the current day */
   advanceNight(): void {
     const entities = [...StateManager.getState().entities];
+    const currentDay = StateManager.getState().currentDay;
 
     for (let i = 0; i < entities.length; i++) {
       const entity = entities[i];
       if (!entity.alive) continue;
 
       const pathData = this.entityPaths.find((p) => p.id === entity.id);
-      if (!pathData || pathData.nightPath.length === 0) continue;
+      if (!pathData) continue;
 
-      const nightEnd = pathData.nightPath[pathData.nightPath.length - 1];
+      const nightPath = pathData.nightPaths[currentDay];
+      if (!nightPath || nightPath.length === 0) continue;
+
       entities[i] = {
         ...entity,
-        position: { ...nightEnd },
+        position: { ...nightPath[nightPath.length - 1] },
         currentPathIndex: 0,
       };
     }
 
     StateManager.setEntities(entities);
-  }
-
-  getEntityPositions(): EntityState[] {
-    return StateManager.getState().entities;
   }
 }

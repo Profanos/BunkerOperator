@@ -8,7 +8,50 @@ import {
 import { StateManager } from '../shared/StateManager.ts';
 import { EventBridge } from '../shared/EventBridge.ts';
 import { SENSOR_RANGE } from '../shared/constants.ts';
-import type { GridPosition, EntityState } from '../shared/types.ts';
+import { SITUATION_1 } from '../data/situations/situation1.ts';
+import { SITUATION_2 } from '../data/situations/situation2.ts';
+import type { GridPosition, EntityState, RadarContact, JournalEntry, EntityPath } from '../shared/types.ts';
+
+/** Entity debug colors — survivors green, zombie red, hostile amber */
+const PATH_COLORS: Record<string, string> = {
+  survivor_test: '#4aff4a',
+  zombie_test:   '#ff4a4a',
+  hostile_kael:  '#f59e0b',
+};
+
+/** Resolve the active path for the given day, respecting journal-driven alternates */
+function getActivePath(ep: EntityPath, day: number, journal: JournalEntry[]): GridPosition[] {
+  const base = ep.dayPaths[day] ?? [];
+  if (!ep.alternatePaths) return base;
+  for (const [key, dayMap] of Object.entries(ep.alternatePaths)) {
+    if (journal.some((e) => e.key === key)) {
+      const alt = dayMap[day];
+      if (alt) return alt;
+    }
+  }
+  return base;
+}
+
+/** Find cells where a survivor and zombie share the same step index on the current day */
+function findCollisionCells(day: number, journal: JournalEntry[]): Set<string> {
+  const all = [...SITUATION_1.entities, ...SITUATION_2.entities];
+  const survivors = all.filter((e) => e.type === 'survivor');
+  const zombies   = all.filter((e) => e.type === 'zombie');
+  const cells = new Set<string>();
+  for (const s of survivors) {
+    const sp = getActivePath(s, day, journal);
+    for (const z of zombies) {
+      const zp = getActivePath(z, day, journal);
+      const len = Math.min(sp.length, zp.length);
+      for (let i = 0; i < len; i++) {
+        if (sp[i].col === zp[i].col && sp[i].row === zp[i].row) {
+          cells.add(`${sp[i].col},${sp[i].row}`);
+        }
+      }
+    }
+  }
+  return cells;
+}
 
 const CELL_SIZE = 48;
 const GRID_WIDTH = GRID_COLS * CELL_SIZE;
@@ -26,12 +69,20 @@ export function MapOverlay() {
   const [sensorPos, setSensorPos] = useState<GridPosition | null>(StateManager.getState().sensorPosition);
   const [entities, setEntities] = useState<EntityState[]>(StateManager.getState().entities);
   const [debugMode, setDebugMode] = useState(StateManager.getState().debugMode);
+  const [radarContacts, setRadarContacts] = useState<RadarContact[]>(StateManager.getState().radarContacts);
+  const [currentDay, setCurrentDay] = useState(StateManager.getState().currentDay);
+  const [discoveredLandmarks, setDiscoveredLandmarks] = useState<string[]>(StateManager.getState().discoveredLandmarks);
+  const [journal, setJournal] = useState<JournalEntry[]>(StateManager.getState().journal);
 
   useEffect(() => {
     const unsub = StateManager.subscribe((state) => {
       setSensorPos(state.sensorPosition);
       setEntities(state.entities);
       setDebugMode(state.debugMode);
+      setRadarContacts(state.radarContacts);
+      setCurrentDay(state.currentDay);
+      setDiscoveredLandmarks(state.discoveredLandmarks);
+      setJournal(state.journal);
     });
     return unsub;
   }, []);
@@ -48,7 +99,11 @@ export function MapOverlay() {
   for (const s of RADIO_STATIONS) stationMap.set(`${s.position.col},${s.position.row}`, s);
 
   const landmarkMap = new Map<string, typeof LANDMARKS[number]>();
-  for (const l of LANDMARKS) landmarkMap.set(`${l.position.col},${l.position.row}`, l);
+  for (const l of LANDMARKS) {
+    if (discoveredLandmarks.includes(l.id)) {
+      landmarkMap.set(`${l.position.col},${l.position.row}`, l);
+    }
+  }
 
   const isBunker = (col: number, row: number) =>
     col === BUNKER_POSITION.col && row === BUNKER_POSITION.row;
@@ -60,17 +115,18 @@ export function MapOverlay() {
       left: 0,
       width: '960px',
       height: '540px',
-      backgroundColor: '#0a0a14',
+      backgroundImage: 'url(/assets/sprites/panel_map.png)',
+      backgroundSize: '960px 540px',
       zIndex: 20,
     }}>
-      {/* Title */}
+      {/* Title — sits above column headers (col headers at MAP_OFFSET_Y-16 ≈ 24px) */}
       <div style={{
         position: 'absolute',
-        top: '6px',
-        left: MAP_OFFSET_X,
+        top: '8px',
+        left: MAP_OFFSET_X + 35,
         color: '#4a4a6e',
         fontFamily: 'monospace',
-        fontSize: '12px',
+        fontSize: '11px',
         letterSpacing: '2px',
       }}>
         TERRITORY MAP — CLICK TO PLACE SENSOR
@@ -193,6 +249,51 @@ export function MapOverlay() {
         );
       })}
 
+      {/* Radar contacts — last known positions from scanner scans */}
+      {radarContacts.map((contact) => {
+        const isStale = contact.day < currentDay;
+        const color = contact.type === 'survivor' ? '#4aff4a' : '#ff4a4a';
+        const dimColor = contact.type === 'survivor' ? '#1a5a1a' : '#5a1a1a';
+        return (
+          <div
+            key={contact.entityId}
+            title={`${contact.type} — last seen ${gridLabel(contact.position)} Day ${contact.day} ${contact.timeStr}`}
+            style={{
+              position: 'absolute',
+              left: MAP_OFFSET_X + contact.position.col * CELL_SIZE + CELL_SIZE / 2,
+              top: MAP_OFFSET_Y + contact.position.row * CELL_SIZE + CELL_SIZE / 2,
+              transform: 'translate(-50%, -50%)',
+              pointerEvents: 'none',
+              zIndex: 8,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+            }}
+          >
+            {/* Hollow ring = last known position from scanner (not current truth) */}
+            <div style={{
+              width: '10px',
+              height: '10px',
+              borderRadius: '50%',
+              backgroundColor: 'transparent',
+              border: `2px solid ${isStale ? dimColor : color}`,
+              opacity: isStale ? 0.4 : 0.85,
+              boxShadow: isStale ? 'none' : `0 0 4px ${color}`,
+            }} />
+            <div style={{
+              fontSize: '8px',
+              fontFamily: 'monospace',
+              color: isStale ? '#3a3a4e' : (contact.type === 'survivor' ? '#2a6a2a' : '#6a2a2a'),
+              whiteSpace: 'nowrap',
+              lineHeight: 1.2,
+              marginTop: '1px',
+            }}>
+              D{contact.day} {contact.timeStr}
+            </div>
+          </div>
+        );
+      })}
+
       {/* Debug entity dots — visible only in debug mode */}
       {debugMode && entities.filter((e) => e.alive).map((entity) => (
         <div
@@ -217,33 +318,87 @@ export function MapOverlay() {
         />
       ))}
 
-      {/* Right sidebar — sensor info + legend */}
+      {/* Debug path overlay — full-day routes + collision markers */}
+      {debugMode && (() => {
+        const allPaths = [...SITUATION_1.entities, ...SITUATION_2.entities];
+        const toX = (col: number) => MAP_OFFSET_X + col * CELL_SIZE + CELL_SIZE / 2;
+        const toY = (row: number) => MAP_OFFSET_Y + row * CELL_SIZE + CELL_SIZE / 2;
+        const collisions = findCollisionCells(currentDay, journal);
+        return (
+          <svg style={{ position: 'absolute', top: 0, left: 0, width: '960px', height: '540px', pointerEvents: 'none', zIndex: 9 }}>
+            {allPaths.map((ep) => {
+              const path = getActivePath(ep, currentDay, journal);
+              if (path.length < 2) return null;
+              const pts = path.map((p) => `${toX(p.col)},${toY(p.row)}`).join(' ');
+              const color = PATH_COLORS[ep.id] ?? '#888';
+              return (
+                <polyline key={ep.id} points={pts} fill="none"
+                  stroke={color} strokeWidth="1.5" strokeOpacity="0.4"
+                  strokeDasharray={ep.type === 'zombie' ? '5,4' : undefined}
+                />
+              );
+            })}
+            {Array.from(collisions).map((key) => {
+              const [col, row] = key.split(',').map(Number);
+              const cx = toX(col); const cy = toY(row); const r = 7;
+              return (
+                <g key={key}>
+                  <line x1={cx-r} y1={cy-r} x2={cx+r} y2={cy+r} stroke="#ff2020" strokeWidth="2.5" strokeOpacity="0.9" />
+                  <line x1={cx+r} y1={cy-r} x2={cx-r} y2={cy+r} stroke="#ff2020" strokeWidth="2.5" strokeOpacity="0.9" />
+                </g>
+              );
+            })}
+          </svg>
+        );
+      })()}
+
+      {/* SENSOR window — aligned to art window center (839, 96) */}
       <div style={{
         position: 'absolute',
-        right: '20px',
-        top: MAP_OFFSET_Y,
-        width: '130px',
+        left: '735px',
+        top: '59px',
+        width: '208px',
+        height: '74px',
         fontFamily: 'monospace',
         fontSize: '11px',
-        color: '#6a6a8e',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '2px',
       }}>
         {sensorPos ? (
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ color: '#4aff4a', fontSize: '12px', marginBottom: '4px' }}>SENSOR</div>
-            <div style={{ color: '#6aff6a' }}>{gridLabel(sensorPos)}</div>
-            <div style={{ color: '#3a6a3a', fontSize: '10px' }}>Range: {SENSOR_RANGE} cells</div>
-          </div>
+          <>
+            <div style={{ color: '#4aff4a', fontSize: '14px', fontWeight: 'bold', letterSpacing: '2px' }}>{gridLabel(sensorPos)}</div>
+            <div style={{ color: '#2a6a2a', fontSize: '10px', letterSpacing: '1px' }}>RANGE {SENSOR_RANGE} CELLS</div>
+          </>
         ) : (
-          <div style={{ color: '#6a4a4a', fontSize: '11px', marginBottom: '16px' }}>
-            NO SENSOR PLACED
-          </div>
+          <div style={{ color: '#4a3a3a', fontSize: '10px', letterSpacing: '1px' }}>NO SENSOR</div>
         )}
-        <div style={{ borderTop: '1px solid #2a2a3e', paddingTop: '8px', fontSize: '10px', lineHeight: '1.8' }}>
-          <div>📡 Radio Station</div>
-          <div>🔒 Bunker</div>
-          <div><span style={{ color: '#4aff4a' }}>■</span> Sensor</div>
-          <div><span style={{ color: '#2a4a5a' }}>■</span> Scan Range</div>
-        </div>
+      </div>
+
+      {/* CONTACTS window — aligned to art window center (840, 228) */}
+      <div style={{
+        position: 'absolute',
+        left: '739px',
+        top: '172px',
+        width: '202px',
+        height: '113px',
+        fontFamily: 'monospace',
+        fontSize: '10px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '5px',
+        color: '#5a6a5a',
+        letterSpacing: '1px',
+      }}>
+        <div><span style={{ color: '#4aff4a' }}>● </span>SURVIVOR</div>
+        <div><span style={{ color: '#ff4a4a' }}>● </span>HOSTILE</div>
+        <div><span style={{ color: '#6a9fb5' }}>■ </span>SCAN RANGE</div>
+        <div><span style={{ color: '#4aff4a', opacity: 0.4 }}>● </span><span style={{ color: '#3a4a3a' }}>STALE CONTACT</span></div>
+        <div style={{ fontSize: '9px', color: '#2a3a2a', marginTop: '2px' }}>📡 RELAY  🔒 BUNKER</div>
       </div>
 
       {/* ESC hint */}

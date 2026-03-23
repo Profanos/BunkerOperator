@@ -29,3 +29,11 @@ export interface DialogueSession {
   startNodeId: string;
   nodes: Record<string, DialogueNode>;
 }
+
+export interface MorningMessage {
+  from: string;
+  text: string;
+  /** Journal key — prevents duplicate logging if component remounts */
+  journalKey: string;
+  journalText: string;
+}

@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="56" viewBox="0 0 200 56">
+  <defs>
+    <!-- Body gradient: gunmetal olive -->
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#3a3f2e"/>
+      <stop offset="40%"  stop-color="#2c3020"/>
+      <stop offset="100%" stop-color="#1e2016"/>
+    </linearGradient>
+    <!-- Display cell: recessed dark glass -->
+    <linearGradient id="cell" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#06080a"/>
+      <stop offset="100%" stop-color="#0d1008"/>
+    </linearGradient>
+    <!-- Top edge highlight -->
+    <linearGradient id="topedge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#5a6040"/>
+      <stop offset="100%" stop-color="#3a3f2e"/>
+    </linearGradient>
+    <!-- Inset shadow for cells -->
+    <filter id="inset" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.8"/>
+    </filter>
+  </defs>
+
+  <!-- Main body -->
+  <rect x="0" y="0" width="200" height="56" rx="3" ry="3" fill="url(#body)"/>
+
+  <!-- Top highlight edge -->
+  <rect x="0" y="0" width="200" height="3" rx="2" ry="2" fill="url(#topedge)" opacity="0.6"/>
+
+  <!-- Bottom shadow edge -->
+  <rect x="0" y="53" width="200" height="3" rx="1" ry="1" fill="#0a0c08" opacity="0.8"/>
+
+  <!-- Side vents — left -->
+  <rect x="4" y="12" width="1" height="32" rx="0.5" fill="#1a1c12" opacity="0.8"/>
+  <rect x="6" y="12" width="1" height="32" rx="0.5" fill="#1a1c12" opacity="0.8"/>
+  <rect x="8" y="12" width="1" height="32" rx="0.5" fill="#1a1c12" opacity="0.8"/>
+
+  <!-- Side vents — right -->
+  <rect x="191" y="12" width="1" height="32" rx="0.5" fill="#1a1c12" opacity="0.8"/>
+  <rect x="189" y="12" width="1" height="32" rx="0.5" fill="#1a1c12" opacity="0.8"/>
+  <rect x="187" y="12" width="1" height="32" rx="0.5" fill="#1a1c12" opacity="0.8"/>
+
+  <!-- Divider between DAY and TIME sections -->
+  <rect x="98" y="6" width="1" height="44" fill="#1a1c12" opacity="0.9"/>
+  <rect x="100" y="6" width="1" height="44" fill="#4a5030" opacity="0.4"/>
+
+  <!-- === DAY SECTION (left) === -->
+  <!-- Label: DAY -->
+  <text x="52" y="17" font-family="monospace" font-size="7" font-weight="bold"
+        fill="#4a5a30" letter-spacing="2" text-anchor="middle">DAY</text>
+
+  <!-- DAY display cell — single large digit area -->
+  <rect x="20" y="20" width="62" height="26" rx="2" fill="url(#cell)" filter="url(#inset)"/>
+  <!-- Cell inner border (recess rim) -->
+  <rect x="20" y="20" width="62" height="26" rx="2" fill="none" stroke="#0a0c06" stroke-width="1.5"/>
+  <!-- Cell top glare -->
+  <rect x="21" y="21" width="60" height="2" rx="1" fill="#1a2010" opacity="0.5"/>
+
+  <!-- Placeholder digit guides (dim ghost segments — code renders real digits over this) -->
+  <!-- These are visual reference marks only, actual numbers drawn by Phaser/CSS -->
+  <text x="51" y="40" font-family="monospace" font-size="16" font-weight="bold"
+        fill="#1a2010" letter-spacing="4" text-anchor="middle">01</text>
+
+  <!-- === TIME SECTION (right) === -->
+  <!-- Label: TIME -->
+  <text x="149" y="17" font-family="monospace" font-size="7" font-weight="bold"
+        fill="#4a5a30" letter-spacing="2" text-anchor="middle">TIME</text>
+
+  <!-- TIME display cell -->
+  <rect x="108" y="20" width="83" height="26" rx="2" fill="url(#cell)" filter="url(#inset)"/>
+  <rect x="108" y="20" width="83" height="26" rx="2" fill="none" stroke="#0a0c06" stroke-width="1.5"/>
+  <rect x="109" y="21" width="81" height="2" rx="1" fill="#1a2010" opacity="0.5"/>
+
+  <!-- Placeholder time guides -->
+  <text x="149" y="40" font-family="monospace" font-size="16" font-weight="bold"
+        fill="#1a2010" letter-spacing="2" text-anchor="middle">00:00</text>
+
+  <!-- Colon separator marker in time cell (subtle, static) -->
+  <rect x="147" y="28" width="2" height="2" rx="1" fill="#1e2a10" opacity="0.6"/>
+  <rect x="147" y="34" width="2" height="2" rx="1" fill="#1e2a10" opacity="0.6"/>
+
+  <!-- Mounting screw corners -->
+  <circle cx="5"   cy="5"  r="2" fill="#252819" stroke="#1a1c10" stroke-width="0.5"/>
+  <circle cx="195" cy="5"  r="2" fill="#252819" stroke="#1a1c10" stroke-width="0.5"/>
+  <circle cx="5"   cy="51" r="2" fill="#252819" stroke="#1a1c10" stroke-width="0.5"/>
+  <circle cx="195" cy="51" r="2" fill="#252819" stroke="#1a1c10" stroke-width="0.5"/>
+  <!-- Screw cross marks -->
+  <line x1="3.5" y1="5"   x2="6.5"  y2="5"   stroke="#1a1c10" stroke-width="0.5"/>
+  <line x1="5"   y1="3.5" x2="5"    y2="6.5" stroke="#1a1c10" stroke-width="0.5"/>
+  <line x1="193.5" y1="5"   x2="196.5" y2="5"   stroke="#1a1c10" stroke-width="0.5"/>
+  <line x1="195"   y1="3.5" x2="195"   y2="6.5" stroke="#1a1c10" stroke-width="0.5"/>
+  <line x1="3.5" y1="51"  x2="6.5"  y2="51"  stroke="#1a1c10" stroke-width="0.5"/>
+  <line x1="5"   y1="49.5" x2="5"   y2="52.5" stroke="#1a1c10" stroke-width="0.5"/>
+  <line x1="193.5" y1="51"  x2="196.5" y2="51"  stroke="#1a1c10" stroke-width="0.5"/>
+  <line x1="195"   y1="49.5" x2="195"  y2="52.5" stroke="#1a1c10" stroke-width="0.5"/>
+</svg>

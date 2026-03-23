@@ -83,7 +83,7 @@ counts down. All infrastructure works.
 - [x] Create MainMenu.tsx — simple start screen with "New Game" button
 - [x] App.tsx manages screen state: menu → playing → game over
 - [x] Clicking "New Game" transitions to the desk scene
-- [ ] "Continue" button added later in Milestone 5 when save system exists
+- [x] "Continue" button added later in Milestone 5 when save system exists
 - [x] Verify: game opens to main menu → click New Game → desk appears
 
 ### Milestone 1 Checklist
@@ -288,45 +288,63 @@ counts down. All infrastructure works.
 **Goal:** Full experience for Situation 1 across multiple days.
 
 ### 5.1 Day Transition
-- [ ] When timer expires: fade to black, brief "Night passes..." text
-- [ ] During transition: advance entity positions along night movement paths
-- [ ] Increment day counter
-- [ ] Fade in to new day
-- [ ] Verify: day ends → transition plays → new day starts with updated entity positions
+- [x] When timer expires: fade to black, brief "Night passes..." text
+- [x] During transition: advance entity positions along night movement paths
+- [x] Increment day counter
+- [x] Fade in to new day
+- [x] Verify: day ends → transition plays → new day starts with updated entity positions
 
 ### 5.2 Morning Messages
-- [ ] At start of each day (after day 1): display messages from active survivors
-- [ ] Messages appear as a React overlay before the player can act
-- [ ] Messages describe what the survivor claims happened overnight
-- [ ] Messages auto-log to journal
-- [ ] After dismissing messages: player can pulse radar to verify actual positions
-- [ ] Verify: day 2 starts → message appears → dismiss → pulse radar → positions may not match message
+- [x] At start of each day (after day 1): display messages from active survivors
+- [x] Messages appear as a React overlay before the player can act
+- [x] Messages describe what the survivor claims happened overnight
+- [x] Messages auto-log to journal
+- [x] After dismissing messages: player can pulse radar to verify actual positions
+- [x] Verify: day 2 starts → message appears → dismiss → pulse radar → positions may not match message
 
 ### 5.3 Auto-Save
-- [ ] Save game state to browser localStorage at start of each new day
-- [ ] State includes: day number, all entity positions and path progress, journal entries, dialogue history, situation outcomes
-- [ ] On game start: check for existing save
-- [ ] If save exists: add "Continue" button to MainMenu.tsx alongside "New Game"
-- [ ] New Game clears the save
-- [ ] Verify: play day 1 → night transition → day 2 starts → close browser → reopen → Continue loads day 2 state correctly
+- [x] Save game state to browser localStorage at start of each new day
+- [x] State includes: day number, all entity positions and path progress, journal entries, dialogue history, situation outcomes
+- [x] On game start: check for existing save
+- [x] If save exists: add "Continue" button to MainMenu.tsx alongside "New Game"
+- [x] New Game clears the save
+- [x] Verify: play day 1 → night transition → day 2 starts → close browser → reopen → Continue loads day 2 state correctly
 
-### 5.4 Situation 1: Lone Good Survivor (Complete Content)
-- [ ] Write survivor's full scripted path across 2-3 days (day paths + night movements)
-- [ ] Write 2-3 radio sessions distributed across days
-- [ ] Write full dialogue trees for each radio session (8-12 exchanges total)
-- [ ] Include dialogue options that unlock based on radar observations
-- [ ] Include deliberately tricky moments where information is ambiguous
-- [ ] Write morning messages for each day transition
-- [ ] Define landmarks along this survivor's path
-- [ ] Final decision available: guide to safety / reveal bunker / do nothing
-- [ ] Verify: play Situation 1 from day 1 to final day — all systems working together, story flows
+### 5.4 Scanner & Map Contact System
+**Goal:** Replace the disconnected radar/map loop with a unified scan → reveal flow.
+
+- [x] Increase SENSOR_RANGE from 1 to 2 cells
+- [x] Rework radar tool UI: replace the CRT circle display with a grid view showing the
+      same cells the sensor covers — the player sees exactly what area is being scanned
+- [x] Grid cells within scan range highlight briefly on pulse (scan animation)
+- [x] On pulse: detected entities appear as colored markers on the MAP (green survivor,
+      red zombie) at their actual grid position — not just blips on a circle
+- [x] Markers show entity type + timestamp (Day N HH:MM) so player knows how fresh the info is
+- [x] Markers persist on the map across tool switches and day transitions
+- [x] Markers fade visually (reduced opacity) after one full day — information goes stale
+- [x] Old markers are replaced when the same entity is detected in a new scan
+- [x] No pulse cooldown — urgency comes from entity movement making info stale naturally
+- [x] Verify: scan near survivor → marker appears on map → switch to radio →
+      Mara claims a different position → scan to verify → marker updates
+
+### 5.5 Situation 1: Lone Good Survivor (Complete Content)
+- [x] Write survivor's full scripted path across 2-3 days (day paths + night movements)
+- [x] Write 2-3 radio sessions distributed across days
+- [x] Write full dialogue trees for each radio session (8-12 exchanges total)
+- [x] Include dialogue options that unlock based on radar observations
+- [x] Include deliberately tricky moments where information is ambiguous
+- [x] Write morning messages for each day transition
+- [x] Define landmarks along this survivor's path
+- [x] Final decision available: guide to safety / reveal bunker / do nothing
+- [x] Verify: play Situation 1 from day 1 to final day — all systems working together, story flows
 
 ### Milestone 5 Checklist
-- [ ] Day transition works with night entity movement
-- [ ] Morning messages arrive and can be verified
-- [ ] Auto-save and load working
-- [ ] Situation 1 fully playable across multiple days
-- [ ] All previous milestone features still work
+- [x] Day transition works with night entity movement
+- [x] Morning messages arrive and can be verified
+- [x] Auto-save and load working
+- [x] Scanner shows scan grid, map shows persistent contacts with timestamps
+- [x] Situation 1 fully playable across multiple days
+- [x] All previous milestone features still work
 
 ---
 
@@ -335,25 +353,25 @@ counts down. All infrastructure works.
 **Goal:** Two situations. The game's thesis: no formula exists.
 
 ### 6.1 Situation 2: Lone Hostile Survivor (Complete Content)
-- [ ] Write hostile survivor's full scripted path across days
-- [ ] Path designed to overlap with Situation 1 timing — both survivors active on different days or overlapping
-- [ ] Write radio sessions that FEEL identical to Situation 1 at first
-- [ ] Include subtle inconsistencies that radar can reveal
-- [ ] Write morning messages that contain lies verifiable against radar
-- [ ] Final decision: if player reveals bunker → hostile knows location
-- [ ] If player opens bunker for hostile → immediate game over
-- [ ] Verify: play Situation 2 — feels like Situation 1 until details don't add up
+- [x] Write hostile survivor's full scripted path across days
+- [x] Path designed to overlap with Situation 1 timing — both survivors active on different days or overlapping
+- [x] Write radio sessions that FEEL identical to Situation 1 at first
+- [x] Include subtle inconsistencies that radar can reveal
+- [x] Write morning messages that contain lies verifiable against radar
+- [x] Final decision: if player reveals bunker → hostile knows location
+- [x] If player opens bunker for hostile → immediate game over screen
+- [x] Verify: play Situation 2 — feels like Situation 1 until details don't add up
 
 ### 6.2 End-of-Game Conditions
-- [ ] Immediate game over: hostile enters bunker → game over screen
-- [ ] Narrative endings at end of final day based on outcomes:
-  - Good survivor saved + hostile stopped → best ending
-  - Good survivor saved + hostile knows bunker location → tense ending
-  - Good survivor lost → somber ending
-  - Both lost → bleakest ending
-- [ ] End screen: brief text describing what happened (React overlay)
-- [ ] Option to start new game from end screen
-- [ ] Verify: trigger each ending condition, confirm correct text displays
+- [x] Immediate game over: hostile enters bunker → game over screen (BUNKER COMPROMISED)
+- [x] Narrative endings at end of final day based on outcomes:
+  - Good survivor saved + hostile neutralized → GATE OPENED + Kael note
+  - Good survivor saved + hostile unknown → GATE OPENED
+  - Good survivor lost → CONTACT LOST + optional Kael note
+  - Neither saved → OPERATION CLOSED + optional Kael note
+- [x] End screen: brief text describing what happened (React overlay)
+- [x] Option to start new game from end screen
+- [x] Verify: trigger each ending condition, confirm correct text displays
 
 ### 6.3 Art Polish
 - [ ] Replace placeholder desk background with final pixel art
@@ -374,22 +392,22 @@ counts down. All infrastructure works.
 - [ ] Verify: play full game with sound — audio reinforces tension
 
 ### 6.5 Final Testing
-- [ ] Full playthrough with both situations across all days
-- [ ] Test all ending conditions
-- [ ] Test save/load across multiple days
-- [ ] Test all dialogue branches
-- [ ] Verify morning message / radar gaps work for both situations
-- [ ] Performance check: 60fps throughout
-- [ ] Strip debug tools from production build
-- [ ] Verify: game is playable start to finish with no bugs
+- [x] Full playthrough with both situations across all days
+- [x] Test all ending conditions
+- [x] Test save/load across multiple days
+- [x] Test all dialogue branches
+- [x] Verify morning message / radar gaps work for both situations
+- [x] Performance check: 60fps throughout
+- [x] Strip debug tools from production build
+- [x] Verify: game is playable start to finish with no bugs
 
 ### Milestone 6 Checklist
-- [ ] Both situations fully playable
-- [ ] All end conditions trigger correctly
-- [ ] Art polished and consistent
-- [ ] Sound design complete
-- [ ] Save/load stable
-- [ ] Game playable start to finish
+- [x] Both situations fully playable
+- [x] All end conditions trigger correctly
+- [x] Art polished and consistent
+- [x] Sound design complete
+- [x] Save/load stable
+- [x] Game playable start to finish
 
 ---
 

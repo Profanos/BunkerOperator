@@ -92,20 +92,6 @@ export const LANDMARKS: Landmark[] = [
     description: 'Abandoned fuel station with a collapsed canopy.',
   },
   {
-    id: 'warehouse',
-    name: 'Warehouse',
-    position: { col: 1, row: 1 },
-    symbol: '🏭',
-    description: 'Large storage building, north wall caved in.',
-  },
-  {
-    id: 'church',
-    name: 'Church',
-    position: { col: 7, row: 2 },
-    symbol: '⛪',
-    description: 'Stone church with a cracked bell tower.',
-  },
-  {
     id: 'water_tower',
     name: 'Water Tower',
     position: { col: 6, row: 7 },

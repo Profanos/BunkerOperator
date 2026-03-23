@@ -11,9 +11,9 @@ export const DAY_START_HOUR = 8;
 export const DAY_END_HOUR = 20;
 
 /** Timer color thresholds in remaining real seconds.
- *  Amber = last 3 game hours, Red = last 1.5 game hours */
-export const TIMER_AMBER_THRESHOLD = 150;
-export const TIMER_RED_THRESHOLD = 75;
+ *  Amber = last 5 game hours, Red = last 3 real minutes */
+export const TIMER_AMBER_THRESHOLD = 300;
+export const TIMER_RED_THRESHOLD = 180;
 
 /** Convert remaining real seconds to a game clock string (HH:MM) */
 export function formatGameTime(timeRemaining: number): string {
@@ -30,13 +30,21 @@ export const GRID_COLS = 10;
 export const GRID_ROWS = 10;
 
 /** Radar sensor range in grid cells */
-export const SENSOR_RANGE = 1;
+export const SENSOR_RANGE = 2;
 
 /** How long radar echoes remain visible in milliseconds */
 export const ECHO_FADE_MS = 8000;
 
 /** Seconds between entity path advances */
 export const ENTITY_MOVE_INTERVAL = 20;
+
+/** Format remaining real seconds as MM:SS countdown for the desk timer display */
+export function formatCountdown(timeRemaining: number): string {
+  const clamped = Math.max(0, Math.ceil(timeRemaining));
+  const mins = Math.floor(clamped / 60);
+  const secs = clamped % 60;
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
 
 /** Radio frequency bounds */
 export const RADIO_FREQ_MIN = 88.0;
