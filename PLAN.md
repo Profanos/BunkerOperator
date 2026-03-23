@@ -148,18 +148,48 @@ The desk is a physical console. Tools must be operable without opening panels.
 - [ ] All desk controls respect energy — toggling on a drained tool does nothing
 - [ ] Panel state persists on close: radio tuned to 97.3 stays at 97.3 on desk
 
-#### L2.3 Map Rework
+#### L2.3 Scanner Rework
+
+**Cooldown:**
+- [ ] 6-second cooldown between pulses
+- [ ] SCAN button states:
+      - Ready: button lit normally
+      - Cooldown: button dims, LAST SCAN readout shows `RECHARGING... ██░░░`
+        filling progressively, then `READY` when available
+- [ ] Cooldown is diegetic — no UI bar, lives in the existing readout window
+- [ ] Pulse costs energy (ENERGY_COST_PULSE constant)
+
+**Live tracking window:**
+- [ ] After a pulse detects an entity, a 20-second tracking window opens
+- [ ] During this window: if the entity moves, its position updates in real time
+      on both the scanner grid AND the map (if map is powered on)
+- [ ] After 20 seconds: marker locks to last known position, goes static
+- [ ] Tracking window visible in STATUS readout: `TRACKING 00:18` counting down
+- [ ] Multiple entities can be in tracking windows simultaneously
+
+**Map icon categories (appear when map is on, persist across sessions):**
+- Zone boundaries + labels — always visible when map powered on
+- Relay station — appears when scanner pulse detects it
+- Relay station (active) — updates when frequency discovered
+- Landmark — appears when scanner pulse covers that cell
+- Unknown contact (?) — first scan of any entity
+- Survivor — upgrades from ? after radio contact established
+- Hostile — upgrades from ? only after confirmed hostile
+- Threat/zombie — appears on scan, marked with hazard symbol
+- All contact markers show timestamp of last scan
+
+#### L2.4 Map Rework
 
 - [ ] Move map from React overlay to Phaser layer
-- [ ] Off state: map art visible but grid dark, elements hidden, not interactive
-- [ ] On state: grid lit, entity markers visible, sensor placement active
+- [ ] Off state: paper map art visible, no grid, no contacts — but miniatures visible
+- [ ] On state: grid lights up over paper, all discovered icons appear
 - [ ] Drag-and-drop sensor token (replaces click-to-place)
-- [ ] Drag-and-drop miniatures: player places tokens to mark tracked positions
-      (miniatures persist across tool switches and days)
-- [ ] Map only responds to drag-drop when powered on
+- [ ] Drag-and-drop miniatures: pin, ?, skull — player annotations
+      Miniatures are physical tokens on the paper — always visible, powered or not
+- [ ] Map interactivity (drag-drop) only works when powered on
 - [ ] Turning map on costs energy (starts draining immediately)
 
-#### L2.4 Radio Contact Identity
+#### L2.5 Radio Contact Identity
 
 - [ ] New state in StateManager: contact identity level per station
       (unknown → partial → revealed)
